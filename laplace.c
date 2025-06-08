@@ -6,7 +6,18 @@
 #define PI (3.1415926535897932384626)
 
 int main(int argc, char **argv) {
+  // Initialize MPI
   MPI_Init(&argc, &argv);
+
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  
+  // For clarity, we print the number of processes being used
+  if(rank == 0)
+    printf("Using %d processes\n", size);
+
+  // Initialize time measurement  
   double start_time = MPI_Wtime();
 
   int i, j, iter = 0;
@@ -17,27 +28,32 @@ int main(int argc, char **argv) {
     n = atoi(argv[1]);
   if (argc > 2)
     m = atoi(argv[2]);
+  
+  int local_n = n / size; // Number of rows per process
+  int first_row = rank * local_n; // Starting row for this process
+  int final_row = first_row + local_n - 1; // Ending row for this process
 
   // The data is dynamically allocated
-  float *A[n], *Anew[n];
-  for (i = 0; i < n; i++) {
+  // We add rows above and below the local_n rows to handle boundaries
+  float **A = (float **)malloc((local_n + 2) * sizeof(float *));
+  float **Anew = (float **)malloc((local_n + 2) * sizeof(float *));
+  for (i = 0; i < local_n + 2; i++) {
     A[i] = (float *)malloc(m * sizeof(float));
     Anew[i] = (float *)malloc(m * sizeof(float));
   }
 
   // All the interior points in the 2D matrix are zero
-  for (i = 0; i < n; i++)
+  for (i = 0; i < local_n + 2; i++)
     for (j = 0; j < m; j++)
       A[i][j] = 0;
 
-  // set boundary conditions
-  for (j = 0; j < m; j++) {
-    A[0][j] = 0.f;
-    A[n - 1][j] = 0.f;
-  }
-  for (i = 0; i < n; i++) {
-    A[i][0] = sinf(PI * i / (n - 1));
-    A[i][m - 1] = sinf(PI * i / (n - 1)) * expf(-PI);
+  // set boundary conditions (left and right)
+  for (i = 0; i < local_n + 2; i++) {
+    int global_i = first_row - 1 + i;
+    if (global_i >= 0 && global_i < n) { // Ensure top and bottom boundaries are 0
+      A[i][0] = sinf(PI * global_i / (n - 1)); // Left boundary
+      A[i][m - 1] = A[i][0] * expf(-PI); // Right boundary
+    }
   }
 
   // If the maximum amount of change between two iterations is within
@@ -47,32 +63,57 @@ int main(int argc, char **argv) {
   int iter_max = 100; // Example
   // Main loop: iterate until error <= tol a maximum of iter_max iterations
   while (error > tol && iter < iter_max) {
+    MPI_Request requests[4];
+    int req_count = 0;
+    // Synchronize the boundary rows with neighboring processes
+    if (rank > 0) {
+      MPI_Isend(A[1], m, MPI_FLOAT, rank - 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+      MPI_Irecv(A[0], m, MPI_FLOAT, rank - 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+    }
+    if (rank < size - 1) {
+      MPI_Isend(A[local_n], m, MPI_FLOAT, rank + 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+      MPI_Irecv(A[local_n + 1], m, MPI_FLOAT, rank + 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+    }
+
+    MPI_Waitall(req_count, requests, MPI_STATUSES_IGNORE);
+
+
     // Calculate the new value for each element based on the current
     // values of its neighbors.
-    for (i = 1; i < n - 1; i++)
+    for (i = 1; i <= local_n; i++)
       for (j = 1; j < m - 1; j++)
-        Anew[i][j] =
-            (A[i][j + 1] + A[i][j - 1] + A[i - 1][j] + A[i + 1][j]) / 4;
+        Anew[i][j] = (A[i][j + 1] + A[i][j - 1] + A[i - 1][j] + A[i + 1][j]) / 4;
 
-    // Compute error = maximum of the square root of the absolute differences
+    // Compute local_error = maximum of the square root of the absolute differences
     // between the new value (Anew) and old one (A)
-    error = 0.0f;
-    for (i = 1; i < n - 1; i++)
+    float local_error = 0.0f;
+    for (i = 1; i <= local_n; i++)
       for (j = 1; j < m - 1; j++)
-        error = fmaxf(error, sqrtf(fabsf(Anew[i][j] - A[i][j])));
+        local_error = fmaxf(local_error, sqrtf(fabsf(Anew[i][j] - A[i][j])));
 
     // Update the value of A with the values calculated into Anew
-    for (i = 1; i < n - 1; i++)
+    for (i = 1; i <= local_n; i++)
       for (j = 1; j < m - 1; j++)
         A[i][j] = Anew[i][j];
+      
+    MPI_Allreduce(&local_error, &error, 1, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD); // Reduce the error across all processes MPI Max
 
     // Every ten iterations the error must be printed
     iter++;
-    if (iter % 10 == 0)
+    if (rank == 0 && iter % 10 == 0)
       printf("%5d, %0.6f\n", iter, error);
   }
   double end_time = MPI_Wtime();
-  printf("Total execution time: %f seconds\n\n", end_time - start_time);
+  if (rank == 0)
+    printf("Total execution time: %f seconds\n\n", end_time - start_time);
+
+  // Free allocated memory
+  for (i = 0; i < local_n + 2; i++) {
+    free(A[i]);
+    free(Anew[i]);
+  }
+  free(A);
+  free(Anew);
 
   MPI_Finalize();
   return 0;
