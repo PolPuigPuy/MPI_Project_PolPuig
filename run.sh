@@ -17,5 +17,5 @@ mpicc -Ofast laplace.c -o exec -lm
 ## UTILITIES:
 #Run multiple times to check scalability:
 for i in {2,4,6,8,10}; do
-    mpirun -n $i ./exec
+    mpirun -n $i ./exec 
 done
