@@ -1,10 +1,14 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <mpi.h>
 
 #define PI (3.1415926535897932384626)
 
 int main(int argc, char **argv) {
+  MPI_Init(&argc, &argv);
+  double start_time = MPI_Wtime();
+
   int i, j, iter = 0;
   int n = 4096, m = 4096;
 
@@ -67,4 +71,9 @@ int main(int argc, char **argv) {
     if (iter % 10 == 0)
       printf("%5d, %0.6f\n", iter, error);
   }
+  double end_time = MPI_Wtime();
+  printf("Total execution time: %f seconds\n\n", end_time - start_time);
+
+  MPI_Finalize();
+  return 0;
 }
