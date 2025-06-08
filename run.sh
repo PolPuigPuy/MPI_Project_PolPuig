@@ -3,8 +3,8 @@
 ##SBATCH -n 4
 #SBATCH --exclusive
 #SBATCH --distribution=cyclic
-#SBATCH --partition=cuda-ext.q # Aolin
-##SBATCH --partition=nodo.q # Wilma
+##SBATCH --partition=cuda-ext.q # Aolin
+#SBATCH --partition=nodo.q # Wilma
 #SBATCH --output=out_sbatch.txt
 #SBATCH --error=err_sbatch.txt
 
