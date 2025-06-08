@@ -29,9 +29,22 @@ int main(int argc, char **argv) {
   if (argc > 2)
     m = atoi(argv[2]);
   
-  int local_n = n / size; // Number of rows per process
-  int first_row = rank * local_n; // Starting row for this process
-  int final_row = first_row + local_n - 1; // Ending row for this process
+  // Calculate the number of rows each process will handle, this way the result is exactly the same
+  // as if the matrix was divided evenly among the processes.
+  // The first process will handle the extra rows if n is not divisible by size
+  int base_rows = n / size;
+  int extra_rows = n % size;
+
+  int local_n;
+  int first_row;
+
+  if (rank < extra_rows) {
+    local_n = base_rows + 1;
+    first_row = rank * local_n;
+  } else {
+    local_n = base_rows;
+    first_row = rank * base_rows + extra_rows;
+  }
 
   // The data is dynamically allocated
   // We add rows above and below the local_n rows to handle boundaries
