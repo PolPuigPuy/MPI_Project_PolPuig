@@ -1,0 +1,4 @@
+laplace_blocking.c: In function ‘main’:
+laplace_blocking.c:129:1: error: expected declaration or statement at end of input
+  129 | }
+      | ^

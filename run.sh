@@ -11,11 +11,11 @@
 module add gcc
 module add openmpi
 
-mpicc -Ofast laplace.c -o exec -lm
+mpicc -Ofast laplace_blocking.c -o exec -lm
 #mpirun -n 4 ./exec
 
 ## UTILITIES:
 #Run multiple times to check scalability:
-for i in {2,4,6,8,10}; do
-    mpirun -n $i ./exec 12 12
+for i in {1,2,4,6,8,10}; do
+    mpirun -n $i ./exec
 done
